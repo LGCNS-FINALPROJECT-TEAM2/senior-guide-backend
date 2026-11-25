@@ -37,6 +37,7 @@ def norm(s):
 
 
 def validate2(name, o):
+    LAST.clear()  # 지난 검사 칸이 남아 엉뚱한 칸을 표시 · 누르지 않게
     act = (o.get("action") or "").upper()
     if act != "TAP":
         return act, "TAP 아님"
@@ -76,6 +77,11 @@ def validate2(name, o):
             return "TAP_SCREEN_ONLY", f"AI는 '{t}'를 봤는데 그 자리 글자는 '{txt[:20]}' → 숨은 팝업 의심, 닫기라 허용"
         return "MISMATCH", f"AI '{t[:15]}' ≠ 그 자리 '{txt[:20]}' → 다시 판단"
     return "TAP", f"통과 ('{txt[:25]}')"
+
+
+def shown_bounds(o):
+    """표시할 칸: 검사 층이 검사한 실제 칸. 그 자리에 칸이 없던 경우(숨은 팝업의 닫기)만 AI 좌표 (11/25: 검사한 칸 = 표시할 칸)"""
+    return LAST["btn"]["b"] if LAST.get("btn") else o.get("bounds")
 
 
 if __name__ == "__main__":

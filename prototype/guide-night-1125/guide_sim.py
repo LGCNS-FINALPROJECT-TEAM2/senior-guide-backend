@@ -76,7 +76,9 @@ def screen_type(ns):
         return "ALERT", "확인"
     # 홍보 팝업: 위쪽 절반에 '닫기' + 할인 · 쿠폰 · 이벤트 · 타임딜 글자 (02:48 요기요 「요-타임딜」 시트를 AI가 본문으로 여기고 4번 밂)
     H2 = max(n["b"][3] for n in ns)
-    if any(n["click"] and own_text(n, ns).strip() == "닫기" and n["b"][1] < H2 * 0.5 for n in ns)             and re.search(r"할인|쿠폰|이벤트|타임딜|혜택|증정|특가", alltxt) and "시트 닫기" not in alltxt:
+    has_close_top = any(n["click"] and own_text(n, ns).strip() == "닫기" and n["b"][1] < H2 * 0.5 for n in ns)
+    promo = re.search(r"할인|쿠폰|이벤트|타임딜|혜택|증정|특가", alltxt)
+    if has_close_top and promo and "시트 닫기" not in alltxt:
         return "POPUP", "닫기"
     for w in ("나중에 할게요", "오늘 그만 보기", "오늘은 그만 보기", "오늘 하루 보지 않기", "오늘 하루 그만 보기", "다시 보지 않기", "배너 접기"):  # 02:45 요기요 「오늘은 그만 보기」 추가
         if any(w in c for c in clickl) or w in alltxt:
@@ -188,8 +190,6 @@ def knowledge(pkg, ns, slots, step_i, done=(), redo=()):
                 ca = st["check_alt"].format(**fmt)
                 if any(own_text(n, ns).strip() == ca for n in ns if n["click"]):
                     continue
-            if "then" in st and any(st["then"] == L for L in labels) and any(st["pick"].format(**fmt) == L for L in labels):
-                pass
         for key in ("pick", "pick_contains"):
             if key in st:
                 val = st[key].format(**{r: k["synonyms"].get(v, v) for r, v in slots.items()})
@@ -206,10 +206,6 @@ def knowledge(pkg, ns, slots, step_i, done=(), redo=()):
             if tab and not on_tab:
                 return ("TAP", f"초성 탭 '{chosung(val[0])}'", tab["b"], st["role"] + "(목록에서 안 보임)")
             return ("SCROLL", f"'{val}' 안 보임 → 목록 아래로", [0, 600, 1080, 2100], st["role"])
-        if "then" in st:
-            sel = [n for n in ns if phone.label(n) == st["then"]]
-            if sel and any(st["pick"].format(**fmt).split(" ")[0] in L for L in labels if "선택" not in L):
-                pass
         if "open_contains" in st:
             for n in ns:
                 L = phone.label(n)

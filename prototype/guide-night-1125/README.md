@@ -34,7 +34,7 @@ Guide 서비스 `/v1/guide/next`의 판단 순서를 실제 폰으로 검증하�
 | 명령 | 무엇 | 기대 결과 |
 |---|---|---|
 | `python -I regress.py` | 저장 화면 → 규칙 · 앱 지식 표가 고르는 행동 | 34/34 통과 |
-| `python -I validate_regress.py` | 저장된 AI 답 → 검사 층이 막을지 · 통과시킬지 (가짜 화면 4개 포함) | 13/13 통과 |
+| `python -I validate_regress.py` | 저장된 AI 답 → 검사 층이 막을지 · 통과시킬지 (가짜 화면 5개 포함) | 14/14 통과 |
 | `python -I guide_sim.py` | 판단 순서 시뮬레이션, `guide_sim_result.md` 다시 만듦 | 21화면 중 AI 1 |
 | `python -I mask.py` | 가리기 패턴 시험 | 「없음」 |
 

@@ -55,4 +55,12 @@ for lab, b, tgt, allow, note in SYN:
     r = validate2.validate2("syn", {"action": "TAP", "target": tgt, "bounds": b})[0]
     ok = r in allow; bad += not ok
     print("✅" if ok else "❌", ("가짜:" + lab).ljust(24), r.ljust(10), "|", note)
-print(f"\n{len(EXPECT) + len(SYN) - bad}/{len(EXPECT) + len(SYN)} 통과")
+
+# 검사한 칸 = 표시할 칸: AI 좌표가 칸과 조금 어긋나도 동그라미는 검사한 칸에 (11/25)
+real = [40, 1000, 1040, 1150]
+validate2.nodes_of = lambda name: fake("열차 조회", real)
+o = {"action": "TAP", "target": "열차 조회", "bounds": [300, 1020, 700, 1100]}
+fin = validate2.validate2("syn", o)[0]
+ok = fin == "TAP" and validate2.shown_bounds(o) == real; bad += not ok
+print("✅" if ok else "❌", "가짜:표시 칸".ljust(24), fin.ljust(10), "|", f"표시 {validate2.shown_bounds(o)} = 검사한 칸 {real}")
+print(f"\n{len(EXPECT) + len(SYN) + 1 - bad}/{len(EXPECT) + len(SYN) + 1} 통과")

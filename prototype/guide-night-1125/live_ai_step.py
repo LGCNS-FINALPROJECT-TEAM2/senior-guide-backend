@@ -24,6 +24,6 @@ validate2.nodes_of = lambda name: ns  # 11/25 검수: eval_v2 쪽을 바꾸면 v
 fin, why = validate2.validate2("live", o)
 print(f"가림 {masked}칸 | 검사 층:", fin, why, f"| 화면→표시 {time.time()-t0:.1f}초")
 if fin in ("TAP", "TAP_SCREEN_ONLY"):
-    show(o["bounds"], o.get("say", ""))
+    show(validate2.shown_bounds(o), o.get("say", ""))
     time.sleep(1.2)
     open(os.path.join(d, tag + "_shown.png"), "wb").write(phone.adb("exec-out", "screencap", "-p", binary=True))

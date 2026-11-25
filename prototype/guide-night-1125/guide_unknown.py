@@ -57,7 +57,7 @@ for i in range(maxn):
         hist.append(f"밀기({dr})"); time.sleep(2); continue
     if fin not in ("TAP", "TAP_SCREEN_ONLY"):
         show(None, o.get("say", "")); print("멈춤:", fin); break
-    show(o["bounds"], o.get("say", "")); time.sleep(1)
+    show(validate2.shown_bounds(o), o.get("say", "")); time.sleep(1)
     open(os.path.join(LIVE, f"{app}_u{i:02d}_shown.png"), "wb").write(phone.adb("exec-out", "screencap", "-p", binary=True))
     phone.adb("shell", "am broadcast -a com.edu.guide.STOP -p com.edu.guide"); time.sleep(0.4)
     b = o["bounds"]; cx, cy = (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
