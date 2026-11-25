@@ -20,7 +20,7 @@ import datetime, hashlib, json, os, re, subprocess, sys, time
 sys.stdout.reconfigure(encoding="utf-8")
 BASE = os.path.dirname(os.path.abspath(__file__))
 ADB = os.environ.get("ADB", "adb")  # adb 실행 파일 경로
-DEV = os.environ["PHONE_DEV"]  # 폰 주소(adb devices에 보이는 이름 또는 IP:포트)
+DEV = os.environ.get("PHONE_DEV", "")  # 폰 주소(adb devices에 보이는 이름 또는 IP:포트). 폰 없이 도는 시험은 안 씀
 LOG = os.path.join(BASE, "taplog.jsonl")
 # 누르기 마감 시각: 밤 작업용이던 06:30 고정을 환경 변수로 (11/25 검수: 고정값이면 오늘부터 모든 누르기가 막힘)
 #   PHONE_UNTIL="2026-11-25 18:00" 처럼 주면 그 시각 이후 안 누름. 없으면 시각 제한 없음
@@ -48,6 +48,8 @@ PRICE = re.compile(r"\d[\d,]*\s*원")
 
 
 def adb(*a, binary=False, timeout=20):
+    if not DEV:
+        sys.exit("PHONE_DEV 환경 변수가 없어요(폰을 쓰는 도구만 필요)")
     r = subprocess.run([ADB, "-s", DEV, *a], capture_output=True, timeout=timeout)
     return r.stdout if binary else r.stdout.decode("utf-8", "replace")
 

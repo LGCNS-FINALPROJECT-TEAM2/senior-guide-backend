@@ -33,7 +33,7 @@ CASES = [
     ("eats/e00_home", F2, (), ("SCROLL", "버거")),
     ("eats/e02_cat3", F2, (), ("TAP", "버거")),
     ("eats/e03_burger", F2, ("CATEGORY",), ("TAP", "맥도날드")),
-    ("eats/e04_mcd", F2, ("CATEGORY", "BRAND"), ("TAP", "맥도날드 양평")),
+    ("eats/e04_mcd", F2, ("CATEGORY", "BRAND"), ("TAP", "맥도날드 ○○")),
     ("coupang/c01_detail", {}, (), "PAYMENT_NEAR"),
     ("coupang/c00_home", {}, (), None),
     ("nmap/n00_home", {}, (), "POPUP"),
@@ -65,7 +65,7 @@ def run(name, slots, done):
 def main():
     ok = bad = 0
     for name, slots, done, exp in CASES:
-        if not os.path.exists(os.path.join(eval_v2.BASE, name + ".xml")):
+        if not os.path.exists(os.path.join(eval_v2.DATA, name + ".xml")):
             print("파일 없음", name); continue
         got = run(name, slots, done)
         if isinstance(exp, tuple):

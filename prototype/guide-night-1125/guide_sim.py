@@ -269,7 +269,8 @@ SCREENS = [
 
 
 def cached_ai(name):
-    p = os.path.join(BASE, "eval_v2_results.jsonl")
+    from eval_v2 import DATA
+    p = os.path.join(DATA, "eval_v2_results.jsonl")
     for l in open(p, encoding="utf-8"):
         r = json.loads(l)
         if r["case"] == name and r["method"] == "img_haiku" and r["rep"] == 0:

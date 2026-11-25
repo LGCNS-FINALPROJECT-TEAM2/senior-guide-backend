@@ -9,6 +9,8 @@ from eval_night import CASES, TOP
 import phone
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+# 시험 화면 위치: 저장소에선 개인정보를 지운 fixtures/, 김우석 PC에선 원본 폴더
+DATA = os.environ.get("GUIDE_DATA") or (os.path.join(BASE, "fixtures") if os.path.isdir(os.path.join(BASE, "fixtures")) else BASE)
 OUT = os.path.join(BASE, "eval_v2_results.jsonl")
 REPEAT = 2
 
@@ -30,7 +32,7 @@ from mask import PRIV  # 11/25 검수: 패턴을 mask.py 한 곳으로 (전화 �
 
 
 def nodes_of(name):
-    x = open(os.path.join(BASE, name + ".xml"), encoding="utf-8").read()
+    x = open(os.path.join(DATA, name + ".xml"), encoding="utf-8").read()
     ns = []
     for s in re.findall(r"<node [^>]*>", x):
         g = lambda k: (re.search(" " + k + r'="([^"]*)"', s) or [None, ""])[1]

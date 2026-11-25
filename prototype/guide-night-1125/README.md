@@ -28,8 +28,24 @@ Guide 서비스 `/v1/guide/next`의 판단 순서를 실제 폰으로 검증하�
 - 코레일+ 열차 목록은 접근성 글자가 0개라 스크린숏 판단이 필요합니다
 
 ## 실행
-- 폰 화면 · 기록 파일(`korail/`, `live/` 등)은 주소 · 이름 · 최근 목적지가 있어 **저장소에 올리지 않았습니다**. 그래서 회귀 시험은 저장소만으로는 돌지 않습니다(화면 파일은 김우석 PC에 있음)
-- `python -I mask.py`(가리기 패턴 시험)는 바로 돌아갑니다
-- 폰을 쓰는 도구: 환경 변수 `PHONE_DEV`(adb 기기 이름 또는 IP:포트), `ADB`(adb 경로), 누르기 마감 `PHONE_UNTIL="2026-11-25 18:00"`
-- AI를 쓰는 도구: `ANTHROPIC_API_KEY` 환경 변수. 누적 비용 상한 $5(`ai.py`의 `LIMIT`). 키는 저장소에 넣지 않습니다
-- 필요한 패키지: `anthropic`, `pillow`
+### 폰 · API 키 없이 (누구 PC에서나)
+필요한 것: 파이썬 3.11+, `pip install pillow`
+
+| 명령 | 무엇 | 기대 결과 |
+|---|---|---|
+| `python -I regress.py` | 저장 화면 → 규칙 · 앱 지식 표가 고르는 행동 | 34/34 통과 |
+| `python -I validate_regress.py` | 저장된 AI 답 → 검사 층이 막을지 · 통과시킬지 (가짜 화면 4개 포함) | 13/13 통과 |
+| `python -I guide_sim.py` | 판단 순서 시뮬레이션, `guide_sim_result.md` 다시 만듦 | 21화면 중 AI 1 |
+| `python -I mask.py` | 가리기 패턴 시험 | 「없음」 |
+
+- 시험 화면은 `fixtures/`에 있습니다. 실제 폰 화면(xml)과 AI 답 기록에서 **주소 · 가게 지점 이름 · 최근 목적지 · 자주 가는 곳을 「○○」이나 「[가림]」으로 바꾼 사본**입니다. 스크린숏(png)은 넣지 않았습니다
+- 원본 화면 · 스크린숏은 개인정보가 있어 김우석 PC에만 있습니다
+
+### 폰이 있어야 하는 도구 (김우석 폰 기준)
+- `phone.py` · `guide_live.py` · `guide_unknown.py` · `live_ai_step.py` · `fp_stability.py`
+- 안드로이드 폰 + adb, 길잡이 시험 앱(`com.edu.guide`, 이 저장소에 없음), 시험 앱 9개 설치 · 첫 실행 · 로그인
+- 환경 변수: `PHONE_DEV`(adb 기기 이름 또는 IP:포트), `ADB`(adb 경로), `PHONE_UNTIL="2026-11-25 18:00"`(누르기 마감)
+
+### AI를 부르는 도구
+- `ai.py` · `eval_*.py` · `intent_test.py` · `followup_test.py` · `live_ai_step.py` · `guide_unknown.py`
+- `pip install anthropic`, 환경 변수 `ANTHROPIC_API_KEY`. 누적 비용 상한 $5(`ai.py`의 `LIMIT`). 키는 저장소에 넣지 않습니다

@@ -6,7 +6,6 @@ python -I ai.py image <png파일> "<목표>" [sonnet|haiku]  스크린숏 + 모�
 """
 import base64, datetime, io, json, os, subprocess, sys, time
 sys.stdout.reconfigure(encoding="utf-8")
-import anthropic
 from PIL import Image
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +36,7 @@ def spent():
 
 
 def call(model, content, tag):
+    import anthropic  # 폰 · AI 없이 도는 시험에서는 안 깔려 있어도 되게
     if spent() >= LIMIT:
         print(f"상한 ${LIMIT} 도달 — 호출 안 함"); sys.exit(2)
     c = anthropic.Anthropic(api_key=key())
