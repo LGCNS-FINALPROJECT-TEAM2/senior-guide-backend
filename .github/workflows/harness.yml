@@ -1,0 +1,81 @@
+# 팀 하네스 CI: 모든 PR과 main push에서 돈다. job 이름 secrets · names = main 보호 규칙의 필수 검사 이름.
+# docs-style은 경고만 남기고 실패시키지 않는다(문장 판단은 기계가 자주 틀림).
+name: harness
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: "8.30.1"
+
+jobs:
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks 설치
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks version
+      - name: 이번 변경의 커밋 전부 검사
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then RANGE="$HEAD"; else RANGE="$BASE..$HEAD"; fi
+          ./gitleaks git --log-opts="$RANGE" --redact --exit-code 1 --verbose
+
+  names:
+    name: names
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 브랜치 이름 · PR 제목 형식 (AGENTS.md 2절)
+        env:
+          BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          fail=0
+          case "$BRANCH" in dependabot/*) echo "의존성 자동 PR은 형식 검사 제외"; exit 0;; esac
+          if ! printf '%s' "$BRANCH" | grep -Eq '^(feat|fix|refactor|docs|test|chore)/[0-9]+(\.[0-9]+){1,2}-[a-z0-9][a-z0-9-]*$'; then
+            echo "::error::브랜치 이름 형식: 종류/WBS번호-영문-설명 (예: feat/2.3.1-refund-api). 지금: $BRANCH"; fail=1
+          fi
+          if ! printf '%s' "$TITLE" | grep -Eq '^\[[0-9]+(\.[0-9]+){1,2}\] .+'; then
+            echo "::error::PR 제목 형식: [WBS번호] 한 줄 설명 (예: [2.3.1] 환불 API 구현). 지금: $TITLE"; fail=1
+          fi
+          if ! printf '%s' "$BODY" | grep -Eiq '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+'; then
+            echo "::warning::PR 본문에 Closes #이슈번호가 없습니다"
+          fi
+          exit $fail
+
+  docs-style:
+    name: docs-style
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 문서 문장 점검 (AGENTS.md 4절, 경고만)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          [ -f .github/slop-words.txt ] || { echo "금지어 목록 없음"; exit 0; }
+          git diff --name-only --diff-filter=AM "$BASE" HEAD -- '*.md' | while read -r f; do
+            grep -v '^#' .github/slop-words.txt | grep -v '^$' | while read -r w; do
+              grep -nE "$w" "$f" | while IFS=: read -r line _; do
+                echo "::warning file=$f,line=$line::AI 말투 의심: $w (AGENTS.md 4절)"
+              done
+            done
+          done
