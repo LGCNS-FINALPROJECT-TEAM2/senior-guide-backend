@@ -63,4 +63,35 @@ o = {"action": "TAP", "target": "열차 조회", "bounds": [300, 1020, 700, 1100
 fin = validate2.validate2("syn", o)[0]
 ok = fin == "TAP" and validate2.shown_bounds(o) == real; bad += not ok
 print("✅" if ok else "❌", "가짜:표시 칸".ljust(24), fin.ljust(10), "|", f"표시 {validate2.shown_bounds(o)} = 검사한 칸 {real}")
-print(f"\n{len(EXPECT) + len(SYN) + 1 - bad}/{len(EXPECT) + len(SYN) + 1} 통과")
+# 위치를 확인하지 못한 닫기는 강조 보류 (11/25 우진님 리뷰)
+extra = 0
+validate2.nodes_of = lambda name: fake("열차 조회", real)
+o = {"action": "TAP", "target": "닫기", "bounds": real}
+fin = validate2.validate2("syn", o)[0]
+ok = fin == "TAP_SCREEN_ONLY" and validate2.shown_bounds(o) is None; bad += not ok; extra += 1
+print("✅" if ok else "❌", "가짜:닫기 아래 열차 조회".ljust(24), fin.ljust(10), "|", f"표시 {validate2.shown_bounds(o)} (None = 강조 보류)")
+validate2.nodes_of = lambda name: fake("열차 조회", [40, 1000, 1040, 1150])
+o = {"action": "TAP", "target": "X", "bounds": [900, 100, 1000, 200]}
+fin = validate2.validate2("syn", o)[0]
+ok = fin == "TAP_SCREEN_ONLY" and validate2.shown_bounds(o) is None; bad += not ok; extra += 1
+print("✅" if ok else "❌", "가짜:칸 없는 자리 X".ljust(24), fin.ljust(10), "|", f"표시 {validate2.shown_bounds(o)} (None = 강조 보류)")
+
+# 캡처 전에 멈출 화면 (11/25 우진님 리뷰)
+import guide_sim as G
+def node(text="", pkg="com.korail.talk", b=(40, 1000, 1040, 1150), click=True, edit=False, password=False):
+    return dict(text=text, desc="", click=click, pkg=pkg, b=list(b), edit=edit, password=password)
+CAP = [
+    ([node("허용", pkg="com.google.android.permissioncontroller")], "com.google.android.permissioncontroller", True, "시스템 권한 창"),
+    ([node("", edit=True, password=True), node("확인")], None, True, "비밀번호 칸"),
+    ([node("인증번호 6자리"), node("확인")], None, True, "인증번호 화면"),
+    ([node("", edit=True), node("로그인")], None, True, "로그인 화면"),
+    ([node("24,300원 결제하기", b=(40, 2100, 1040, 2250)), node("배달 주소", b=(40, 100, 1040, 200), click=False)], None, True, "아래 결제 버튼"),
+    ([node("열차 조회"), node("출발역 서울 선택됨", b=(40, 400, 500, 520))], None, False, "코레일 메인(평범)"),
+]
+for ns, pkg, want, note in CAP:
+    r = G.capture_block_reason(ns, pkg)
+    ok = bool(r) == want; bad += not ok; extra += 1
+    print("✅" if ok else "❌", ("캡처:" + note).ljust(24), str(r)[:30].ljust(10), "|", "멈춰야" if want else "찍어도 됨")
+total = len(EXPECT) + len(SYN) + 1 + extra
+print(f"\n{total - bad}/{total} 통과")
+raise SystemExit(1 if bad else 0)  # 실패를 종료 코드로 (11/25 우진님 리뷰: 13/14인데 0으로 끝났음)

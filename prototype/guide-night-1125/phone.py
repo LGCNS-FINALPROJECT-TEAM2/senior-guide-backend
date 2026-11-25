@@ -74,7 +74,7 @@ def dump():
         nodes.append(dict(text=g("text").replace("&#10;", " ").replace("&amp;", "&"),
                           desc=g("content-desc").replace("&#10;", " "), click=g("clickable") == "true",
                           pkg=g("package"), rid=g("resource-id"), b=b,
-                          edit=g("class").endswith("EditText")))
+                          edit=g("class").endswith("EditText"), password=g("password") == "true"))
     return x, nodes
 
 

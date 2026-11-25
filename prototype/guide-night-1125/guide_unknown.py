@@ -24,6 +24,9 @@ for i in range(maxn):
         b = G.find(ns, hint, contains=(hint != "닫기"))
         if b:
             print(i, "규칙", st, hint); phone.tap_node(app, b, ns, f"unknown 규칙 {hint}"); time.sleep(2); continue
+    why_stop = G.capture_block_reason(ns, phone.focus())  # 캡처 · 저장 · AI 호출 전에 (11/25 우진님 리뷰)
+    if why_stop:
+        show(None, "이 화면은 직접 확인해 주세요. 제가 화면을 보지 않을게요."); print(i, "캡처 안 함:", why_stop); break
     raw = phone.adb("exec-out", "screencap", "-p", binary=True)
     im = Image.open(io.BytesIO(raw)).convert("RGB")
     masked = mask.mask_image(im, ns)  # 맨 위 줄 기본 가림(02:48 시트 뒤 주소) + 주소 · 전화 · 동호 · 이름 패턴 (11/25 검수: mask.py로 모음)

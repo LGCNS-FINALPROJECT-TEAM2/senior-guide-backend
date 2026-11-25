@@ -86,6 +86,29 @@ def screen_type(ns):
     return "NORMAL", None
 
 
+SENSITIVE_WORDS = ("비밀번호", "인증번호", "본인인증", "공동인증서", "카드번호", "계좌번호", "보안카드", "OTP", "주민등록번호", "PIN")
+
+
+def capture_block_reason(ns, pkg=None):
+    """스크린숏을 찍기 · 저장하기 · AI로 보내기 전에 멈춰야 하는 화면이면 이유를, 아니면 None (11/25 우진님 리뷰)
+    허용 앱이 아님 / 시스템 권한 · 동의 · 결제 직전 / 비밀번호 칸 / 로그인 · 인증 · 카드 글자"""
+    pkg = pkg or next((n["pkg"] for n in ns if n["pkg"]), "")
+    if pkg not in phone.ALLOWED_PKG:
+        return f"허용 앱 아님({pkg})"
+    if any(n.get("password") for n in ns):
+        return "비밀번호 입력 칸"
+    labels = " ".join(phone.label(n) for n in ns)
+    for w in SENSITIVE_WORDS:
+        if w in labels:
+            return f"민감 글자 '{w}'"
+    if any(n["edit"] for n in ns) and "로그인" in labels:
+        return "로그인 화면"
+    st, _ = screen_type(ns)
+    if st in ("SYSTEM_PERMISSION", "CONSENT", "PAYMENT_NEAR"):
+        return f"화면 종류 {st}"
+    return None
+
+
 RULE_REPLY = {
     "CONFIRM": ("PICK_BY_USER", "휴대폰이 확인을 묻고 있어요. 내용을 보고 '네'나 '아니오'를 직접 골라 주세요."),
     "SYSTEM_PERMISSION": ("PICK_BY_USER", "휴대폰이 권한을 묻고 있어요. 직접 골라 주세요."),

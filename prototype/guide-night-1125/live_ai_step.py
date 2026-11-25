@@ -4,10 +4,16 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PIL import Image
 import ai, phone, eval_v2, validate2, mask
+import guide_sim as G
 from guide_live import show
 
 goal, tag = sys.argv[1], sys.argv[2]
 x, ns = phone.dump()
+why_stop = G.capture_block_reason(ns, phone.focus())  # 캡처 · 저장 · AI 호출 전에 (11/25 우진님 리뷰)
+if why_stop:
+    print("캡처 안 함:", why_stop)
+    show(None, "이 화면은 직접 확인해 주세요. 제가 화면을 보지 않을게요.")
+    sys.exit(0)
 d = os.path.join(eval_v2.BASE, "live"); png = os.path.join(d, tag + ".png")
 raw = phone.adb("exec-out", "screencap", "-p", binary=True); open(png, "wb").write(raw)
 open(os.path.join(d, tag + ".xml"), "w", encoding="utf-8").write(x)
@@ -24,6 +30,6 @@ validate2.nodes_of = lambda name: ns  # 11/25 검수: eval_v2 쪽을 바꾸면 v
 fin, why = validate2.validate2("live", o)
 print(f"가림 {masked}칸 | 검사 층:", fin, why, f"| 화면→표시 {time.time()-t0:.1f}초")
 if fin in ("TAP", "TAP_SCREEN_ONLY"):
-    show(validate2.shown_bounds(o), o.get("say", ""))
+    show(validate2.shown_bounds(o), o.get("say", ""))  # 위치 확인 못 한 닫기는 강조 없이 말만
     time.sleep(1.2)
     open(os.path.join(d, tag + "_shown.png"), "wb").write(phone.adb("exec-out", "screencap", "-p", binary=True))

@@ -70,18 +70,23 @@ def validate2(name, o):
     if not big and phone.PRICE.search(txt):
         return "BLOCK", "작은 버튼에 금액"
     if not txt:
-        return ("TAP", "글자 없는 큰 칸(스크린숏 판단)") if big else ("BLOCK", "글자 없는 작은 버튼")
+        if big:
+            LAST["ok"] = True
+            return "TAP", "글자 없는 큰 칸(스크린숏 판단)"
+        return "BLOCK", "글자 없는 작은 버튼"
     # AI가 본 글자와 그 자리 글자 비교
     if t and not icon and not any(k in norm(txt) for k in [norm(t)] + words_of(t)):
         if is_close(t):
+            LAST.clear()  # 그 자리 칸은 닫기가 아님 → 이 칸을 강조 · 누르면 안 됨 (11/25 우진님 리뷰: 「열차 조회」 전체가 강조됨)
             return "TAP_SCREEN_ONLY", f"AI는 '{t}'를 봤는데 그 자리 글자는 '{txt[:20]}' → 숨은 팝업 의심, 닫기라 허용"
         return "MISMATCH", f"AI '{t[:15]}' ≠ 그 자리 '{txt[:20]}' → 다시 판단"
+    LAST["ok"] = True
     return "TAP", f"통과 ('{txt[:25]}')"
 
 
 def shown_bounds(o):
-    """표시할 칸: 검사 층이 검사한 실제 칸. 그 자리에 칸이 없던 경우(숨은 팝업의 닫기)만 AI 좌표 (11/25: 검사한 칸 = 표시할 칸)"""
-    return LAST["btn"]["b"] if LAST.get("btn") else o.get("bounds")
+    """표시할 칸: 검사 층이 TAP으로 통과시킨 실제 칸만. 위치를 확인하지 못한 경우(TAP_SCREEN_ONLY 등)는 None = 강조 보류, 말만 (11/25 우진님 리뷰)"""
+    return LAST["btn"]["b"] if LAST.get("ok") and LAST.get("btn") else None
 
 
 if __name__ == "__main__":
