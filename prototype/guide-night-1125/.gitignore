@@ -1,0 +1,10 @@
+# 실제 폰 화면 · 기록에는 주소 · 이름 · 최근 목적지가 있어 저장소에 올리지 않음
+*/
+!.gitignore
+*.png
+*.xml
+*.txt
+*.jsonl
+*.log
+__pycache__/
+.env
