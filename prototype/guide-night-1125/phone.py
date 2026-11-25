@@ -63,8 +63,16 @@ def focus():
 
 
 def dump():
-    adb("shell", "uiautomator", "dump", "/sdcard/n.xml")
-    x = adb("shell", "cat", "/sdcard/n.xml")
+    # 배너가 계속 도는 화면은 uiautomator가 「could not get idle state」로 실패하고 옛 파일이 남음(11/25 배민 음식배달)
+    # → 지우고 다시 시도, 그래도 실패하면 빈 화면으로(옛 화면을 읽지 않게). 실제 앱은 접근성 서비스라 이 한계 없음
+    x = ""
+    for _ in range(3):
+        adb("shell", "rm", "-f", "/sdcard/n.xml")
+        out = adb("shell", "uiautomator", "dump", "/sdcard/n.xml")
+        x = adb("shell", "cat", "/sdcard/n.xml")
+        if "ERROR" not in out and "<hierarchy" in x:
+            break
+        x = ""; time.sleep(1)
     nodes = []
     for s in re.findall(r"<node [^>]*>", x):
         g = lambda k: (re.search(" " + k + r'="([^"]*)"', s) or [None, ""])[1]
@@ -76,6 +84,34 @@ def dump():
                           pkg=g("package"), rid=g("resource-id"), b=b,
                           edit=g("class").endswith("EditText"), password=g("password") == "true"))
     return x, nodes
+
+
+def dump_fast(timeout=3.0):
+    """길잡이 앱(접근성 서비스)이 바로 읽은 화면: DUMP2 → logcat. uiautomator보다 빠르고 움직이는 화면에서도 됨 (11/25 직접 시험: 2.5 ~ 10초 → 1초 안쪽)
+    한 줄 = 글자 있는 칸, 좌표는 그 칸을 감싼 「누를 수 있는 칸」 좌표(앱 쪽 구현 그대로)"""
+    adb("logcat", "-c")
+    adb("shell", "am broadcast -a com.edu.guide.DUMP2 -p com.edu.guide")
+    t0 = time.time(); lines = []
+    while time.time() - t0 < timeout:
+        out = adb("logcat", "-d", "-s", "GUIDE")
+        lines = [l.split("DUMP2|", 1)[1] for l in out.splitlines() if "DUMP2|" in l]
+        if lines and lines[-1].strip() == "end":
+            break
+        time.sleep(0.15)
+    nodes = []
+    for l in lines:
+        parts = l.split("|", 4)
+        if len(parts) < 5:
+            continue
+        pkg, click, edit, b, text = parts
+        try:
+            bb = list(map(int, b.split(",")))
+        except ValueError:
+            continue
+        nodes.append(dict(text=text.strip(), desc="", click=click == "true", pkg=pkg, rid="", b=bb, edit=edit == "true", password=False))
+    if any(n["pkg"] in ALLOWED_PKG for n in nodes):  # 삼성 Edge 패널 같은 다른 창 글자는 빼기
+        nodes = [n for n in nodes if n["pkg"] in ALLOWED_PKG]
+    return "", nodes
 
 
 def label(n):

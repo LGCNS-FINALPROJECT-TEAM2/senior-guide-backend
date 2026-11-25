@@ -33,7 +33,7 @@ KNOW = {
         "home": "음식배달에서 더보기",
         "search_entry": ["검색", "검색 버튼, 떡볶이? 김밥?"],  # 밀기 제한에 걸리면 음성 검색 안내 (03:24)
         "synonyms": {"햄버거": "패스트푸드"},
-        "steps": [{"role": "CATEGORY", "pick": "{CATEGORY}", "check": "기본순"},  # 가게 목록 화면이면 카테고리는 끝
+        "steps": [{"role": "CATEGORY", "pick": "{CATEGORY}", "check": "기본순", "open": "음식배달에서 더보기"},  # 가게 목록 화면이면 카테고리는 끝 / 첫 화면 7칸에 없으면 「더보기」(11/25 찜닭)
                   {"role": "STORE", "pick_contains": "{BRAND}", "card": True, "check": "가장 인기 있는 메뉴", "if_missing": {"action": "SCROLL", "dir": "up", "area": [0, 700, 1080, 1900], "max": 3}},
                   {"role": "ITEM", "pick_contains": "{ITEM}", "if_missing": {"action": "SCROLL", "dir": "up", "area": [0, 700, 1080, 1900], "max": 4}}],
         "danger_icons": ["장바구니 담기"],
@@ -162,8 +162,11 @@ def knowledge(pkg, ns, slots, step_i, done=(), redo=()):
             inc = next((n for n in ns if phone.label(n) == f"{t} 인원증가"), None)
             if not dec or not inc:
                 continue
-            cur = next((int(phone.label(n)) for n in ns if phone.label(n).isdigit() and dec["b"][2] <= n["b"][0] <= inc["b"][0]
-                        and abs(n["b"][1] - dec["b"][1]) < 40), 0)
+            # 숫자 칸 = 감소 · 증가 버튼 가운데 사이, 같은 줄 (11/25: 접근성 읽기에선 숫자 칸이 감소 버튼과 겹쳐 들어와 0명으로 읽음)
+            cx = lambda bb: (bb[0] + bb[2]) / 2
+            cy = lambda bb: (bb[1] + bb[3]) / 2
+            cur = next((int(phone.label(n)) for n in ns if phone.label(n).isdigit() and cx(dec["b"]) < cx(n["b"]) < cx(inc["b"])
+                        and abs(cy(n["b"]) - cy(dec["b"])) < 60), 0)
             rows.append((t, cur, want.get(t, 0), dec, inc))
         for t, cur, goal, dec, inc in rows:  # 늘릴 것 먼저 (총 0명이 되면 앱이 막을 수 있음)
             if cur < goal:
@@ -204,6 +207,16 @@ def knowledge(pkg, ns, slots, step_i, done=(), redo=()):
             if btn:
                 # 확정 버튼이 있는 칸은 '고름'만으론 끝이 아님 (02:40: 27일만 누르고 '선택 완료' 전에 끝으로 기억함)
                 return ("TAP", v, btn["b"], st["role"] + ("(고름)" if "then" in st else ""))
+            # 달력이 다른 달을 보여 주면 「이전달 · 다음달」 (11/25: 앞 시험이 12월에 두고 끝나 11/26을 못 찾음)
+            mhead = next((re.match(r"^(\d{4})년 (\d{1,2})월$", L) for L in labels if re.match(r"^(\d{4})년 (\d{1,2})월$", L)), None)
+            mt = re.match(r"^(\d{1,2})월", fmt.get("DATE_SHORT", ""))
+            if mhead and mt and int(mhead.group(2)) != int(mt.group(1)):
+                shown, want = int(mhead.group(2)), int(mt.group(1))
+                fwd = (want - shown) % 12 < 6
+                nav = next((n for n in ns if phone.label(n) == ("다음달" if fwd else "이전달")), None)
+                b = phone.clickable_for(nav, ns) if nav else None
+                if b or nav:
+                    return ("TAP", "다음달" if fwd else "이전달", (b or nav)["b"], st["role"] + "(달 넘기기)")
         if "check" in st and st["role"] not in redo:  # redo = 잘못 누름으로 다시 해야 하는 칸(화면 확인을 믿지 않음)
             c = st["check"].format(**fmt)
             if any(c in L and (st.get("check_in", "") in L) for L in labels):
