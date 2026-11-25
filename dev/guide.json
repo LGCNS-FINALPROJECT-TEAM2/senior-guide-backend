@@ -1,0 +1,5 @@
+{
+  "mode": "mock",
+  "target": "attach_button",
+  "message": "사진을 보내려면 첨부 버튼을 눌러 주세요."
+}
