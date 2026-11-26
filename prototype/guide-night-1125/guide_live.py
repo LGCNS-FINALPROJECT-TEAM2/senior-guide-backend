@@ -255,7 +255,7 @@ def _show_for(d, level=0):
     if d["action"] == "BACK":
         show(None, "'뒤로' 누르세요", nudge or d.get("sub", ""))
     elif d["action"] == "SCROLL":
-        show(d.get("b"), "화면을 밀어 주세요", nudge or "찾는 게 아래에 있어요")
+        show(d.get("b"), "화면을 밀어 주세요", nudge or d.get("sub") or "찾는 게 아래에 있어요")
     else:
         show(d.get("b"), d["say"], nudge or d.get("sub", ""), speak=d.get("speak") if level == 0 else None)
 
@@ -336,6 +336,175 @@ def human_loop(app, slots, maxsec=600):
             show(None, say, d.get("sub", "")); print("  ↳ 여기서 멈춤:", d["action"], d.get("label")); return
         _show_for(d); shown_at = now
     print("시간 끝")
+
+
+BRAIN = os.environ.get("GUIDE_BRAIN", "ai")  # ai = brain.py(AI가 버튼을 고름, 규칙은 울타리만) / rules = 11/25 오후까지의 규칙 · 앱 지식 표
+
+
+# ---------------------------------------------------------------- 화면 저장 (11/27 우석: 폰에서 틀린 화면을 PC에서 다시 돌려 보려고)
+# captures/<시각>_<앱>/NN.xml = 판단한 화면(글자는 mask_text로 가림, fixtures와 같은 xml 모양 → eval_v2.nodes_of로 읽힘)
+# captures/<시각>_<앱>/steps.jsonl = 화면마다 목표 · 판단 · 결과(다음 화면 · 누른 칸 · 되돌아옴). captures/는 .gitignore(*/)로 안 올라감
+# 캡처 금지 화면(비밀번호 · 인증 · 결제 직전 · 허용 앱 아님)은 xml을 남기지 않고 이유만. GUIDE_SAVE=0이면 끔
+SAVE = os.environ.get("GUIDE_SAVE", "1") != "0"
+CAP = {"dir": None, "n": 0, "last": None}
+
+
+def _xml_of(ns):
+    from mask import mask_text
+    # eval_v2.nodes_of는 글자를 되돌리지(unescape) 않음 → &는 그대로 두고, 읽기를 깨는 " < >만 비슷한 글자로(왕복해도 후보 · 지문이 같게)
+    escape = lambda v, quote=True: v.replace('"', "”").replace("<", "‹").replace(">", "›").replace("\n", " ")
+    rows = []
+    for n in ns:
+        a = dict(text=mask_text(n.get("text") or ""), **{"content-desc": mask_text(n.get("desc") or "")}, clickable=str(bool(n.get("click"))).lower(),
+                 package=n.get("pkg") or "", bounds="[{},{}][{},{}]".format(*n["b"]), **{"resource-id": n.get("rid") or ""},
+                 **{"class": ("android.widget.EditText" if n.get("edit") else (n.get("cls") or ""))})
+        rows.append("<node " + " ".join(f'{k}="{escape(str(v), quote=True)}"' for k, v in a.items()) + " />")
+    return "<?xml version='1.0' encoding='UTF-8' ?>\n<hierarchy>\n" + "\n".join(rows) + "\n</hierarchy>\n"
+
+
+def cap_start(app):
+    if not SAVE:
+        return
+    CAP.update(dir=os.path.join(BASE, "captures", time.strftime("%Y%m%d_%H%M%S") + "_" + app), n=0, last=None)
+    os.makedirs(CAP["dir"], exist_ok=True)
+    print("  💾 화면 저장:", CAP["dir"])
+
+
+def _cap_log(rec):
+    rec["time"] = time.strftime("%H:%M:%S")
+    with open(os.path.join(CAP["dir"], "steps.jsonl"), "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def cap_screen(app, ns, d, slots, fp):
+    """판단한 화면 하나 저장. 돌려줌: 이 화면 번호(결과를 붙일 때 씀)"""
+    if not SAVE or not CAP["dir"]:
+        return None
+    from mask import mask_text
+    CAP["n"] += 1
+    i = CAP["n"]
+    pkg = next((n["pkg"] for n in ns if n["pkg"]), "")
+    why = G.capture_block_reason(ns, pkg)
+    name = None
+    if not why:
+        name = f"{i:02d}.xml"
+        open(os.path.join(CAP["dir"], name), "w", encoding="utf-8").write(_xml_of(ns))
+    plan = d.get("plan") or {}
+    _cap_log(dict(type="screen", i=i, xml=name, not_saved=why, app=app, pkg=pkg, fp=fp, goal=mask_text(GOAL[0]), slots=slots,
+                  layer=d.get("layer"), action=d.get("action"), pick_text=mask_text(d.get("pick_text") or ""), say=d.get("say"),
+                  why=mask_text(plan.get("why") or d.get("label") or ""), expect_next=mask_text(plan.get("expect_next") or ""),
+                  progress=mask_text(plan.get("progress") or ""), confidence=plan.get("confidence")))
+    CAP["last"] = i
+    return i
+
+
+def cap_outcome(i, new_fp, clicked, trail):
+    """앞 화면 판단의 결과: 다음 화면 지문 · 사람이 실제로 누른 칸 · 되돌아옴(A→B→A)"""
+    if not SAVE or not CAP["dir"] or not i:
+        return
+    from mask import mask_text
+    undo = len(trail) >= 2 and trail[-2][0] == new_fp
+    _cap_log(dict(type="outcome", i=i, next_fp=new_fp, clicked=[mask_text(c.get("label") or "") for c in (clicked or [])][-3:], undo=undo))
+
+
+def cap_event(kind, **k):
+    """그 밖의 일: 다시 판단(45초 그대로) · 끝 · 시간 끝"""
+    if SAVE and CAP["dir"]:
+        _cap_log(dict(type=kind, i=CAP["last"], **k))
+
+
+def ai_loop(app, slots, maxsec=600):
+    """사람이 누르는 모드 + AI 판단기(brain.py) (11/25 저녁 우석: 규칙으로 모든 예외를 못 막음 → AI가 목표에 가장 가까운 버튼을 고름)
+    - 화면 지문이 0.5초 사이 그대로일 때만 판단(넘어가는 중인 화면에 AI를 부르지 않음), 같은 화면은 다시 묻지 않음
+    - 화면이 바뀌면 brain.observe가 「밀면 나온 것 · 누르면 간 곳 · 되돌아옴」을 쌓음 → 다음 판단 · 다음 사람에게 쓰임
+    - 기다리기 · 다시 띄우기(4초 · 20초 · 45초)는 human_loop와 같음"""
+    import brain
+    brain.reset()
+    cap_start(app); cap_i = None  # 11/27 화면 저장
+    cur_fp, cur_d, prev_ns, shown_at, since, level = None, None, None, 0, 0, 0
+    shown_t = 0  # 지금 안내를 띄운 시각 → 그 뒤 CLICK 로그 = 사람이 실제로 누른 칸
+    t_end = time.time() + maxsec
+    while time.time() < t_end:
+        _, ns = phone.dump_fast()
+        if not ns:
+            time.sleep(0.4); continue
+        fp = brain.fingerprint(ns)
+        now = time.time()
+        if fp == cur_fp:
+            if cur_d["action"] in ("TAP", "SCROLL") and cur_d.get("layer") in ("AI", "경험") and now - since > brain.REJECT_SEC:
+                print(f"  ⏰ {brain.REJECT_SEC}초 그대로 → 이 안내는 안 되는 걸로 보고 다시 판단(A2)")
+                brain.reject(fp, cur_d); cap_event("reject", fp=fp, why=f"{brain.REJECT_SEC}초 그대로"); cur_fp = None; continue
+            if cur_d["action"] in ("TAP", "BACK", "SCROLL"):
+                if now - since > 45 and level < 2:
+                    level = 2; _show_for(cur_d, level); shown_at = now; print("  ⏰ 45초 그대로 → 「안 돼요」 안내")
+                elif now - since > 20 and level < 1:
+                    level = 1; _show_for(cur_d, level); shown_at = now; print("  ⏰ 20초 그대로 → 「여기를 눌러 주세요」")
+            touched = phone.LAST_TOUCH[0] > shown_at
+            if touched and now - phone.LAST_TOUCH[0] < 3:
+                pass  # 11/25 밤 우석: 누르면 안내는 바로 없어짐(시험 앱이 지움) → 화면이 바뀌길 기다리고 다시 띄우지 않음
+            elif now - shown_at > (3 if touched else 15):  # 만졌는데 3초 지나도 그대로면 다시 띄움. 안 만졌으면 혹시 지워졌을 때만 15초마다
+                _show_for(cur_d, level); shown_at = now
+            time.sleep(0.4); continue
+        time.sleep(0.5); _, ns2 = phone.dump_fast()  # 넘어가는 중인 화면이면 다음 바퀴에
+        if not ns2 or brain.fingerprint(ns2) != fp:
+            continue
+        if cur_d is not None:
+            clicked = phone.clicks_since(shown_t)
+            if clicked:
+                print("    ↳ 누른 칸:", " / ".join(c["label"][:15] for c in clicked[-2:]))
+            cap_outcome(cap_i, fp, clicked, brain.TRAIL)
+            brain.observe(prev_ns, cur_d, ns2, slots, clicked=clicked)
+        if cur_fp is not None and fp != cur_fp and fp in brain.SESSION:
+            # 11/27 우석: 다른 화면에 갔다가 돌아온 화면은 그사이 값이 바뀌었을 수 있음 → 옛 안내를 그대로 쓰지 않고 다시 판단
+            # (같은 화면에 머무는 동안만 옛 안내 재사용. 성공했던 길은 brain의 경험 층이 따로 빠르게 줌)
+            brain.SESSION.pop(fp, None)
+            print("  ↺ 갔다 돌아온 화면 → 옛 안내 안 쓰고 다시 판단")
+        t0 = time.time()
+        d = brain.decide(app, ns2, slots, GOAL[0])
+        cap_i = cap_screen(app, ns2, d, slots, fp)
+        print(time.strftime("%H:%M:%S"), f"[{d['layer']} {time.time() - t0:.1f}s]", d["action"], "|", d["say"], "|", d.get("sub", ""), "|", (d.get("plan") or {}).get("why", d.get("label", ""))[:60])
+        if (d.get("plan") or {}).get("expect_next"):
+            print("    ↳ 예측:", d["plan"]["expect_next"][:60], "| 진행:", d["plan"].get("progress", "")[:60])
+        if d["action"] == "AI":  # 글자로 판단 안 됨 → 사진으로 (코레일 열차 목록은 읽어 주고 어르신이 고름)
+            if app == "korail" and any(phone.label(n) == "출발 빠른 순" for n in ns2):
+                train_choice(app, ns2, slots)
+                d = dict(layer="열차 읽기", action="PICK_BY_USER", say="몇 시 기차로 할까요?", sub="골라서 눌러 주세요", b=None, label="열차 목록 읽음")
+                shown_at = time.time()
+            else:
+                d = ai_next(app, ns2)
+                print("  ↳ 사진 AI:", d["action"], "|", d["say"], "|", d.get("label"))
+                _show_for(d); shown_at = time.time()
+            brain.SESSION[fp] = d
+            cap_event("image", action=d["action"], say=d.get("say"), label=d.get("label"))
+        elif d["action"] == "ASK" and HUMAN:  # AI가 되묻기 → 대답을 목표에 붙이고 이 화면 다시 판단
+            show(None, d["say"], d.get("sub", ""), speak=d.get("speak"))
+            ans = input(f"  대답({d['say']})> ").strip()
+            if ans:
+                GOAL[0] += f" / 어르신 대답: {ans}"
+            brain.SESSION.pop(fp, None); cur_fp = None; continue
+        elif d["action"] in ("STOP", "DONE"):
+            t_h = time.time(); same = True  # 정말 그 화면인지 2초 더 봄(넘어가는 중 오판 방지)
+            while time.time() - t_h < 2:
+                time.sleep(0.6); _, ns3 = phone.dump_fast()
+                if ns3 and brain.fingerprint(ns3) != fp:
+                    same = False; break
+            if not same:
+                brain.SESSION.pop(fp, None); continue
+            show(None, d["say"], d.get("sub", ""), speak=d.get("speak"))
+            print("  ↳ 여기서 끝:", d["action"], d.get("label"), "| 통계", brain.STATS)
+            cap_event("end", action=d["action"], stats=dict(brain.STATS)); return
+        else:
+            if d["layer"] in ("AI", "경험"):  # A1: 판단하는 동안 어르신이 이미 눌렀으면 옛 화면 안내를 띄우지 않음
+                _, ns_chk = phone.dump_fast()
+                if ns_chk and brain.fingerprint(ns_chk) != fp:
+                    print("  ↳ 판단하는 사이 화면이 바뀜 → 이 안내는 안 띄움")
+                    continue
+            _show_for(d); shown_at = time.time()
+        brain.track(fp, d)
+        cur_fp, cur_d, prev_ns, since, level = fp, d, ns2, time.time(), 0
+        shown_t = time.time()
+    print("시간 끝 | 통계", brain.STATS)
+    cap_event("timeout", stats=dict(brain.STATS))
 
 
 def main():
@@ -429,7 +598,7 @@ def main():
         slots = dict(slots, **json.loads(os.environ["GUIDE_SLOTS"]))
     if HUMAN:
         GOAL[0] = (os.environ.get("GUIDE_UTT") or utt0 or "") + " / 칸: " + json.dumps({k: v for k, v in slots.items() if k != "DATE_SHORT"}, ensure_ascii=False) + " (결제 · 예매 확정은 어르신이 직접)"
-        human_loop(app, slots); return
+        (ai_loop if BRAIN == "ai" else human_loop)(app, slots); return
     step = 0
     last = None
     for i in range(maxn):

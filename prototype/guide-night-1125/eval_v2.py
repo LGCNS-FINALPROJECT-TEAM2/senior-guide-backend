@@ -39,7 +39,9 @@ def nodes_of(name):
         b = list(map(int, re.findall(r"\d+", g("bounds"))))
         if len(b) == 4:
             ns.append(dict(text=g("text").replace("&#10;", " "), desc=g("content-desc"), click=g("clickable") == "true",
-                           pkg=g("package"), b=b, edit=g("class").endswith("EditText")))
+                           pkg=g("package"), b=b, edit=g("class").endswith("EditText"),
+                           rid=g("resource-id"), cls=g("class").rsplit(".", 1)[-1],  # 11/25 밤: 구조 지문용
+                           sel=g("selected") == "true"))  # 11/27: 지금 고른 탭 · 칩
     return ns
 
 

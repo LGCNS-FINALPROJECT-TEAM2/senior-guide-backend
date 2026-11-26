@@ -33,7 +33,7 @@ KNOW = {
         "home": "음식배달에서 더보기",
         "search_entry": ["검색", "검색 버튼, 떡볶이? 김밥?"],  # 밀기 제한에 걸리면 음성 검색 안내 (03:24)
         "synonyms": {"햄버거": "패스트푸드"},
-        "steps": [{"role": "CATEGORY", "pick": "{CATEGORY}", "check": "기본순", "open": "음식배달에서 더보기"},  # 가게 목록 화면이면 카테고리는 끝 / 첫 화면 7칸에 없으면 「더보기」(11/25 찜닭)
+        "steps": [{"role": "CATEGORY", "pick": "{CATEGORY}", "check": "기본순", "check_tab": True, "open": "음식배달에서 더보기"},  # 가게 목록 화면이면 카테고리는 끝 / 첫 화면 7칸에 없으면 「더보기」(11/25 찜닭)
                   {"role": "STORE", "pick_contains": "{BRAND}", "card": True, "check": "가장 인기 있는 메뉴", "if_missing": {"action": "SCROLL", "dir": "up", "area": [0, 700, 1080, 1900], "max": 3}},
                   {"role": "ITEM", "pick_contains": "{ITEM}", "if_missing": {"action": "SCROLL", "dir": "up", "area": [0, 700, 1080, 1900], "max": 4}}],
         "danger_icons": ["장바구니 담기"],
@@ -220,6 +220,19 @@ def knowledge(pkg, ns, slots, step_i, done=(), redo=()):
         if "check" in st and st["role"] not in redo:  # redo = 잘못 누름으로 다시 해야 하는 칸(화면 확인을 믿지 않음)
             c = st["check"].format(**fmt)
             if any(c in L and (st.get("check_in", "") in L) for L in labels):
+                if st.get("check_tab"):  # 11/27 W01: 목록 화면이어도 다른 탭(돈까스·회)일 수 있음 → 목표 탭이 「누를 수 있는 탭」으로 보이면 아직 안 고른 것
+                    v = st["pick"].format(**fmt)
+                    tn = next((n for n in ns if phone.label(n) == v), None)
+                    tb = phone.clickable_for(tn, ns) if tn else None
+                    sw = max(n["b"][2] for n in ns) * max(n["b"][3] for n in ns)
+                    tappable = tb and (tb["b"][2] - tb["b"][0]) * (tb["b"][3] - tb["b"][1]) < 0.2 * sw
+                    if any(n.get("sel") for n in ns):  # 화면이 「선택됨」을 알려 줌(XML selected · 시험 앱 DUMP4)
+                        cx, cy = ((tn["b"][0] + tn["b"][2]) / 2, (tn["b"][1] + tn["b"][3]) / 2) if tn else (-1, -1)
+                        on = tn is not None and (tn.get("sel") or any(n.get("sel") and n["b"][0] <= cx <= n["b"][2] and n["b"][1] <= cy <= n["b"][3] for n in ns))
+                        if tn is not None and not on and tappable:
+                            return ("TAP", v, tb["b"], st["role"] + "(다른 탭에서 바꾸기)")
+                    elif tappable:  # 옛 시험 앱(선택됨 모름): 선택된 탭은 눌림 칸이 없어 화면 전체로 잡히는 점으로 짐작
+                        return ("TAP", v, tb["b"], st["role"] + "(다른 탭에서 바꾸기)")
                 continue  # 이미 맞게 채워짐
             # 큰글씨 모드처럼 글자가 「출발역」 · 「서울」로 나뉘면 → 누름 칸 안 글자를 합쳐 확인 (03:04)
             if "check_alt" in st:

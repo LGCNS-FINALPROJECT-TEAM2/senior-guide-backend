@@ -29,7 +29,7 @@ CASES = [
     ("baemin/b01_fastfood", F, ("CATEGORY",), ("SCROLL", "맥도날드")),
     ("baemin/b02_list_scroll", F, ("CATEGORY",), ("TAP", "맥도날드 ○○점")),
     ("baemin/b04_store_menu", F, ("CATEGORY", "STORE"), ("TAP", "불고기 버거")),
-    ("baemin/W01_wrong", F, (), ("SCROLL", "맥도날드")),       # 잘못 누른 화면: 세션 없이 보면 착각(알려진 한계 — clickedLabel로 해결)
+    ("baemin/W01_wrong", F, (), ("TAP", "패스트푸드")),       # 「돈까스·회」를 잘못 누른 화면(선택 탭 = 돈까스·회) → 위쪽 줄 「패스트푸드」로 (11/27 정답 고침: 전에는 SCROLL 맥도날드)
     ("eats/e00_home", F2, (), ("SCROLL", "버거")),
     ("eats/e02_cat3", F2, (), ("TAP", "버거")),
     ("eats/e03_burger", F2, ("CATEGORY",), ("TAP", "맥도날드")),

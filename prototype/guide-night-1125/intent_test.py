@@ -5,11 +5,23 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ai
 
-ai.SYS = ("너는 어르신 스마트폰 길잡이의 '말 해석기'야. 어르신 말에서 업무 종류와 칸을 뽑는다. 추측으로 채우지 말고, 말에 없으면 missing에 넣는다.\n"
+WEEK = "월화수목금토일"
+
+
+def sys_prompt(today=None):
+    """11/27 폰 시험: 「오늘은 2026-11-25」가 글자로 박혀 있어 「내일」이 늘 11/26(지난 날짜)이 됨 → 실행하는 날 기준으로.
+    GUIDE_TODAY=2026-11-25 처럼 주면 그 날로(시험 재현용)"""
+    t = today or (datetime.date.fromisoformat(os.environ["GUIDE_TODAY"]) if os.environ.get("GUIDE_TODAY") else datetime.date.today())
+    nxt = (t + datetime.timedelta(days=1)).isoformat()
+    return SYS_T.replace("{TODAY}", f"{t.isoformat()} {WEEK[t.weekday()]}요일").replace("{EX}", nxt)
+
+
+SYS_T = ("너는 어르신 스마트폰 길잡이의 '말 해석기'야. 어르신 말에서 업무 종류와 칸을 뽑는다. 추측으로 채우지 말고, 말에 없으면 missing에 넣는다.\n"
           "업무 종류(taskType): BOOK_TRAIN(기차표) · BOOK_BUS(버스표) · TRAVEL(어디 가고 싶은데 수단을 안 정함) · ORDER_FOOD(배달) · SEND_PHOTO(사진 보내기) · WATCH(영상 보기) · UNSUPPORTED\n"
           "칸 이름: DEPARTURE · ARRIVAL · DATE · TIME · COUNT · MODE(TRAIN/BUS/ANY) · ITEM · BRAND · RECIPIENT · CONTENT · QUERY\n"
-          "날짜는 '2026-11-26'처럼(오늘은 2026-11-25 수요일). 범위 날짜(주말 등)는 DATE에 'YYYY-MM-DD~YYYY-MM-DD'로, 시간은 '08:00' 또는 '오전'처럼. 업무마다 꼭 필요한 칸: BOOK_TRAIN/BOOK_BUS=DEPARTURE,ARRIVAL,DATE / TRAVEL=ARRIVAL,DATE,MODE / ORDER_FOOD=ITEM / SEND_PHOTO=RECIPIENT / WATCH=QUERY\n"
+          "날짜는 '{EX}'처럼(오늘은 {TODAY}). 범위 날짜(주말 등)는 DATE에 'YYYY-MM-DD~YYYY-MM-DD'로, 시간은 '08:00' 또는 '오전'처럼. 업무마다 꼭 필요한 칸: BOOK_TRAIN/BOOK_BUS=DEPARTURE,ARRIVAL,DATE / TRAVEL=ARRIVAL,DATE,MODE / ORDER_FOOD=ITEM / SEND_PHOTO=RECIPIENT / WATCH=QUERY\n"
           "반드시 JSON 하나만: {\"taskType\":\"...\",\"slots\":{칸:값},\"missing\":[칸],\"say\":\"되물을 말 1문장(빠진 게 없으면 시작 안내)\"}")
+ai.SYS = sys_prompt()
 
 CASES = [  # (말, 기대 taskType, 기대 slots 일부, 기대 missing 일부)
     ("내일 아침에 부산 가는 기차 알아봐 줘", "BOOK_TRAIN", {"ARRIVAL": "부산", "DATE": "2026-11-26"}, ["DEPARTURE"]),
@@ -46,6 +58,7 @@ def norm(v):
 
 
 def main():
+    ai.SYS = sys_prompt(datetime.date(2026, 11, 25))  # CASES 정답이 11/25 기준
     out_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "intent_results.jsonl")
     score = {"type": 0, "slots": 0, "missing": 0, "invented": 0}
     cases = HARD if "--hard" in sys.argv else CASES

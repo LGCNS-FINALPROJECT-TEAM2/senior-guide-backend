@@ -35,17 +35,34 @@ def spent():
     return sum(json.loads(l)["usd"] for l in open(COST, encoding="utf-8") if l.strip())
 
 
-def call(model, content, tag):
+NO_SCHEMA = set()  # JSON 스키마 강제를 거절한 모델(그땐 프롬프트 + 하네스 검사만으로)
+
+
+def call(model, content, tag, system=None, schema=None, quiet=False, effort="low", think=True, max_tokens=1024):
+    """system: 안 주면 SYS(옛 코드 호환). schema: 주면 답을 그 JSON 스키마로 강제(structured outputs, 11/25 brain.py)
+    think=False: Haiku 5.5 생각 끄기(effort high 이하에서만 됨, 11/25 밤 속도). max_tokens: 생각까지 포함한 상한(11/25 밤: 1024에서 잘려 다시 부른 일 있음)"""
     import anthropic  # 폰 · AI 없이 도는 시험에서는 안 깔려 있어도 되게
     if spent() >= LIMIT:
         print(f"상한 ${LIMIT} 도달 — 호출 안 함"); sys.exit(2)
     c = anthropic.Anthropic(api_key=key())
     t = time.time()
-    kw = dict(model=model, max_tokens=1024, system=SYS, messages=[{"role": "user", "content": content}],
-              output_config={"effort": "low"})
+    oc = {"effort": effort}
+    if schema and model not in NO_SCHEMA:
+        oc["format"] = {"type": "json_schema", "schema": schema}
+    kw = dict(model=model, max_tokens=max_tokens, system=system or SYS, messages=[{"role": "user", "content": content}],
+              output_config=oc)
     if model == SONNET:
         kw["thinking"] = {"type": "between_tools"}  # 생각 끄기 (live_guide.py와 같음)
-    r = c.messages.create(**kw)
+    elif not think and effort in ("low", "medium", "high"):
+        kw["thinking"] = {"type": "disabled"}
+    try:
+        r = c.messages.create(**kw)
+    except anthropic.BadRequestError as e:
+        if "format" not in oc:
+            raise
+        print(f"[{model}] JSON 스키마 강제 거절 → 프롬프트만으로: {str(e)[:120]}")
+        NO_SCHEMA.add(model); oc.pop("format")
+        r = c.messages.create(**kw)
     dt = time.time() - t
     i, o = PRICE[model]
     usd = (r.usage.input_tokens * i + r.usage.output_tokens * o) / 1e6
@@ -55,7 +72,8 @@ def call(model, content, tag):
                                 usd=round(usd, 5)), ensure_ascii=False) + "\n")
     txt = "".join(b.text for b in r.content if b.type == "text")
     print(f"[{model} · {dt:.1f}s · in {r.usage.input_tokens} out {r.usage.output_tokens} · ${usd:.4f} · 누적 ${spent():.3f}]")
-    print(txt)
+    if not quiet:
+        print(txt)
     return txt
 
 

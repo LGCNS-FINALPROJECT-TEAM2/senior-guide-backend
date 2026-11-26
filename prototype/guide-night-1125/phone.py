@@ -82,33 +82,82 @@ def dump():
         nodes.append(dict(text=g("text").replace("&#10;", " ").replace("&amp;", "&"),
                           desc=g("content-desc").replace("&#10;", " "), click=g("clickable") == "true",
                           pkg=g("package"), rid=g("resource-id"), b=b,
-                          edit=g("class").endswith("EditText"), password=g("password") == "true"))
+                          edit=g("class").endswith("EditText"), password=g("password") == "true", sel=g("selected") == "true"))
     return x, nodes
+
+
+CLICKS = []   # 사람이 실제로 누른 칸(시험 앱 CLICK 로그) — dump_fast가 logcat을 지우기 전에 모아 둠 (11/25 밤)
+_SEEN_CLICK = set()
+
+
+LAST_TOUCH = [0.0]   # 사람이 화면을 마지막으로 만진 PC 시각(시험 앱 TOUCH 로그, 받은 시각 기준) — 11/25 밤
+_SEEN_TOUCH = set()
+
+
+def _harvest_clicks(out):
+    for l in out.splitlines():
+        if "TOUCH|" in l:
+            ts = l.split("TOUCH|", 1)[1].strip()
+            if ts not in _SEEN_TOUCH:
+                _SEEN_TOUCH.add(ts); LAST_TOUCH[0] = time.time()
+            continue
+        if "CLICK|" not in l:
+            continue
+        parts = l.split("CLICK|", 1)[1].split("|", 3)
+        if len(parts) < 4 or parts[0] in _SEEN_CLICK:
+            continue
+        _SEEN_CLICK.add(parts[0])
+        try:
+            bb = list(map(int, parts[2].split(",")))
+        except ValueError:
+            bb = None
+        CLICKS.append(dict(t=int(parts[0]) / 1000, pkg=parts[1], b=bb, label=parts[3].strip()))
+        LAST_TOUCH[0] = time.time()
+    del CLICKS[:-20]
+
+
+def clicks_since(t):
+    """t(PC 시각) 뒤에 누른 칸. 폰 · PC 시계 차이가 있을 수 있어 2초 여유"""
+    return [c for c in CLICKS if c["t"] >= t - 2]
 
 
 def dump_fast(timeout=3.0):
     """길잡이 앱(접근성 서비스)이 바로 읽은 화면: DUMP2 → logcat. uiautomator보다 빠르고 움직이는 화면에서도 됨 (11/25 직접 시험: 2.5 ~ 10초 → 1초 안쪽)
-    한 줄 = 글자 있는 칸, 좌표는 그 칸을 감싼 「누를 수 있는 칸」 좌표(앱 쪽 구현 그대로)"""
+    한 줄 = 글자 있는 칸, 좌표는 그 칸을 감싼 「누를 수 있는 칸」 좌표(앱 쪽 구현 그대로)
+    11/25 밤: 새 시험 앱은 DUMP3(resource-id · 클래스 포함), 옛 앱은 DUMP2 그대로 읽음. 지우기 전에 CLICK 로그를 모음"""
+    _harvest_clicks(adb("logcat", "-d", "-s", "GUIDE"))
     adb("logcat", "-c")
     adb("shell", "am broadcast -a com.edu.guide.DUMP2 -p com.edu.guide")
-    t0 = time.time(); lines = []
+    t0 = time.time(); lines = []; v4l = []
     while time.time() - t0 < timeout:
         out = adb("logcat", "-d", "-s", "GUIDE")
-        lines = [l.split("DUMP2|", 1)[1] for l in out.splitlines() if "DUMP2|" in l]
+        _harvest_clicks(out)
+        lines = [l.split("|", 1)[1] for l in out.splitlines() if "DUMP2|" in l or "DUMP3|" in l]
+        v4l = [l.split("DUMP4|", 1)[1] for l in out.splitlines() if "DUMP4|" in l]  # 11/27 새 시험 앱: 선택됨까지
+        if v4l:
+            lines = v4l + [x for x in lines if x.strip() == "end"]
         if lines and lines[-1].strip() == "end":
             break
         time.sleep(0.15)
     nodes = []
     for l in lines:
-        parts = l.split("|", 4)
-        if len(parts) < 5:
+        if l.strip() == "end":
             continue
-        pkg, click, edit, b, text = parts
+        v4 = bool(v4l) and l.count("|") >= 7 and l.split("|")[6] in ("true", "false")
+        v3 = not v4 and l.count("|") >= 6
+        parts = l.split("|", 7 if v4 else 6 if v3 else 4)
+        sel = None  # None = 옛 시험 앱이라 모름
+        if v4:
+            pkg, click, edit, b, rid, cls, sel, text = parts; sel = sel == "true"
+        elif v3:
+            pkg, click, edit, b, rid, cls, text = parts
+        else:
+            pkg, click, edit, b, text = parts; rid = cls = ""
         try:
             bb = list(map(int, b.split(",")))
         except ValueError:
             continue
-        nodes.append(dict(text=text.strip(), desc="", click=click == "true", pkg=pkg, rid="", b=bb, edit=edit == "true", password=False))
+        nodes.append(dict(text=text.strip(), desc="", click=click == "true", pkg=pkg, rid=rid, cls=cls, b=bb, edit=edit == "true", password=False, sel=sel))
     if any(n["pkg"] in ALLOWED_PKG for n in nodes):  # 삼성 Edge 패널 같은 다른 창 글자는 빼기
         nodes = [n for n in nodes if n["pkg"] in ALLOWED_PKG]
     return "", nodes
