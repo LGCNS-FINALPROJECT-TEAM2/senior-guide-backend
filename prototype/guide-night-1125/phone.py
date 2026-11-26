@@ -134,8 +134,9 @@ def dump_fast(timeout=3.0):
         _harvest_clicks(out)
         lines = [l.split("|", 1)[1] for l in out.splitlines() if "DUMP2|" in l or "DUMP3|" in l]
         v4l = [l.split("DUMP4|", 1)[1] for l in out.splitlines() if "DUMP4|" in l]  # 11/27 새 시험 앱: 선택됨까지
-        if v4l:
-            lines = v4l + [x for x in lines if x.strip() == "end"]
+        v5l = [l.split("DUMP5|", 1)[1] for l in out.splitlines() if "DUMP5|" in l]  # 11/27: + 비밀번호 칸 여부
+        if v5l or v4l:
+            lines = (v5l or v4l) + [x for x in lines if x.strip() == "end"]
         if lines and lines[-1].strip() == "end":
             break
         time.sleep(0.15)
@@ -143,11 +144,15 @@ def dump_fast(timeout=3.0):
     for l in lines:
         if l.strip() == "end":
             continue
-        v4 = bool(v4l) and l.count("|") >= 7 and l.split("|")[6] in ("true", "false")
-        v3 = not v4 and l.count("|") >= 6
-        parts = l.split("|", 7 if v4 else 6 if v3 else 4)
+        v5 = bool(v5l) and l.count("|") >= 8 and l.split("|")[6] in ("true", "false") and l.split("|")[7] in ("true", "false")
+        v4 = not v5 and bool(v4l) and l.count("|") >= 7 and l.split("|")[6] in ("true", "false")
+        v3 = not v5 and not v4 and l.count("|") >= 6
+        parts = l.split("|", 8 if v5 else 7 if v4 else 6 if v3 else 4)
         sel = None  # None = 옛 시험 앱이라 모름
-        if v4:
+        pwd = False  # DUMP4 이하는 비밀번호 칸 정보가 없음(11/27 명세 §10)
+        if v5:
+            pkg, click, edit, b, rid, cls, sel, pwd, text = parts; sel = sel == "true"; pwd = pwd == "true"
+        elif v4:
             pkg, click, edit, b, rid, cls, sel, text = parts; sel = sel == "true"
         elif v3:
             pkg, click, edit, b, rid, cls, text = parts
@@ -157,7 +162,7 @@ def dump_fast(timeout=3.0):
             bb = list(map(int, b.split(",")))
         except ValueError:
             continue
-        nodes.append(dict(text=text.strip(), desc="", click=click == "true", pkg=pkg, rid=rid, cls=cls, b=bb, edit=edit == "true", password=False, sel=sel))
+        nodes.append(dict(text=text.strip(), desc="", click=click == "true", pkg=pkg, rid=rid, cls=cls, b=bb, edit=edit == "true", password=pwd, sel=sel))
     if any(n["pkg"] in ALLOWED_PKG for n in nodes):  # 삼성 Edge 패널 같은 다른 창 글자는 빼기
         nodes = [n for n in nodes if n["pkg"] in ALLOWED_PKG]
     return "", nodes

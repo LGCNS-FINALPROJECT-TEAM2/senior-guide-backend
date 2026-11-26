@@ -200,6 +200,16 @@ t("CLICK 줄: 누른 칸 글자 · 위치를 한 번만 모음(두 번 읽어도
 t("누른 칸 ↔ 안내 칸 맞추기(위치)", B.click_matches(dict(b=[0, 0, 400, 200], pick_text="x"), P.CLICKS) is True)
 t("누른 칸 ↔ 안내 칸 다름", B.click_matches(dict(b=[0, 500, 400, 700], pick_text="열차 조회"), P.CLICKS) is False)
 
+# ⑧-2 DUMP5(11/27): 비밀번호 칸 여부 → 사람 모드에서도 울타리가 멈춤
+_LOG5 = ("11-27 I GUIDE: DUMP5|com.korail.talk|true|true|40,500,1040,620|com.korail.talk:id/pw|EditText|false|true|(비밀번호 칸)\n"
+         "11-27 I GUIDE: DUMP5|com.korail.talk|true|false|40,700,1040,820|com.korail.talk:id/login|Button|false|false|로그인\n"
+         "11-27 I GUIDE: DUMP2|end\n")
+P.adb = lambda *a: _LOG5 if a[:1] == ("logcat",) and "-d" in a else ""
+_, ns5 = P.dump_fast(timeout=0.5)
+P.adb = _adb0
+t("DUMP5 줄: 비밀번호 칸 여부를 읽음", len(ns5) == 2 and ns5[0]["password"] is True and ns5[1]["password"] is False and ns5[0]["sel"] is False, ns5)
+t("DUMP5 비밀번호 칸이 있으면 캡처 · AI 전에 멈춤", B.G.capture_block_reason(ns5, "com.korail.talk") == "비밀번호 입력 칸", B.G.capture_block_reason(ns5, "com.korail.talk"))
+
 # ⑨ 실제 폰에서 터진 것(11/25 밤): 날짜만 바뀐 첫 화면을 같은 화면으로 봐서 「가는날」을 또 안내
 def _home(date, clock="15:58"):
     return [dict(text=clock, desc="", click=False, pkg="com.korail.talk", b=[0, 0, 200, 50], edit=False),
