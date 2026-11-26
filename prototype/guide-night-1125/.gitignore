@@ -1,0 +1,14 @@
+# 실제 폰 화면 · 기록에는 주소 · 이름 · 최근 목적지가 있어 저장소에 올리지 않음
+*/
+!fixtures/
+!fixtures/**
+!.gitignore
+*.png
+*.txt
+*.log
+# 원본 화면 · 기록은 올리지 않음(fixtures/ 안만 예외)
+/*.xml
+/*.jsonl
+*.log
+__pycache__/
+.env
